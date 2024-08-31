@@ -1,0 +1,50 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, avg
+import pandas as pd
+import pyarrow as pa
+import pyarrow.hdfs as hdfs
+
+# Criando uma sessão Spark
+spark = SparkSession.builder \
+    .appName("Analise Socioeconomica Avancada") \
+    .getOrCreate()
+
+# Carregando os dados socioeconômicos do Hadoop (HDFS)
+dados = spark.read.csv("hdfs:///AZZA/T.I/dados_socioeconomicos.csv", header=True, inferSchema=True)
+
+# Exibindo o esquema dos dados
+dados.printSchema()
+
+# Filtrando dados por faixa etária
+dados_filtrados = dados.filter((col("idade") >= 18) & (col("idade") <= 65))
+
+# Calculando a média de renda por nível educacional
+media_renda = dados_filtrados.groupBy("nivel_educacional").agg(avg("renda").alias("media_renda"))
+
+# Salvando o resultado intermediário no HDFS
+media_renda.write.csv("hdfs:///AZZA/T.I/resultados/media_renda_por_educacao.csv", header=True)
+
+# Encerrando a sessão Spark
+spark.stop()
+
+# Conectando ao HDFS e carregando o resultado intermediário com pandas
+fs = hdfs.HadoopFileSystem("hdfs://seu-nodo-hadoop:8020")
+with fs.open("/AZZA/T.I/media_renda_por_educacao.csv/part-00000", "rb") as f:
+    # Carregar o arquivo CSV no pandas
+    media_renda_df = pd.read_csv(f)
+
+# Exibindo o DataFrame do pandas
+print("DataFrame do pandas:")
+print(media_renda_df.head())
+
+# Análise detalhada com pandas
+# Exemplo: Encontrando o nível educacional com a maior média de renda
+max_renda = media_renda_df.loc[media_renda_df['media_renda'].idxmax()]
+
+print("\nNível educacional com a maior média de renda:")
+print(max_renda)
+
+# Salvando o resultado final em um arquivo CSV local
+media_renda_df.to_csv("./AZZA/T.I/media_renda_por_educacao_local.csv", index=False)
+
+print("\nResultado final salvo em .S/AZZA/T.I/media_renda_por_educacao_local.csv")
